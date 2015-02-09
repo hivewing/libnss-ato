@@ -3,29 +3,28 @@ libnss-ato (Name Service Switch module All-To-One)
 
 The libnss_ato module is a set of C library extensions which allows to map every nss request for unknown user to a single predefined user.
 
-Description
+How We Use It
 =========
 
-Suppose your system has only one account (apart from root and system users) named user_test:
+On our system we wanted a secure way to allow ssh tunneling.  We can have many more users than would reasonably fit onto one machine.  We also wanted to avoid trying to sync those users between all of the machines.  
 
-```console
-]$ id user_test
-]$ uid=1000(user_test) gid=1000 groups=1000
-```
+On one hand, systems like gitolite solve the problem by appending to authorized_keys. This is great for a few thousand users.  After that, the cost of linearly searching for the key is time consuming.  And you need to keep all those keys synced.  If the keys change often, that can be quite daunting.
 
-If you add libnss-ato to the chain of nss modules (in /etc/nsswitch.conf) you get something like:
+On the other, ssh has AuthorizedKeysCommand which allows you to go look up keys for a username and return just those that should match.
 
-```console
-]$ id randomname
-]$ uid=1000(user_test) gid=1000 groups=1000
-```
+This seemed promising!
 
-for every query of a random username not present in /etc/passwd.
+The downside was that it looks things up by username, and linux does not let you log in with out a user account on the machine.
 
-Why?
-=========
+Enter - libnss-ato
 
-This module can be used for pubblic workstations where you only need to verify username / password from a pam module (for example pam-krb5 for Active Directory users) and there is no need to give the user his own uid, gid or homedir
+Libnss-ato lets us resolve every username to the same user-uid, but *still keeping their username*.
+So you can ssh into any box with look-up-my-public-keys@server.  libnss-ato will say you are a user.  sshd calls the AuthorizedKeysCommand with that username.  Letting you look up keys specifically for only that user.
+
+In order to keep this more secure, we only allow ssh logins. Only ssh logins with keys.  We allow no commands to be run via ssh (only tunneling).  And the shell and home dir of the ato user is /bin/false and /dev/null.
+
+So far this seems like it's working.
+
 
 Installation
 =========
@@ -35,7 +34,7 @@ From source just make and make install.
 The only configuration file is `/etc/libnss-ato.conf` which consists of one line in the passwd format. For example:
 
 ```console
-test_user:x:1000:1000:Test User,:/home/test:/bin/bash
+any_user:x:1000:1000:Test User,:/dev/null:/bin/false
 ```
 
 Only the first line of the file `/etc/libnss-ato.conf` is parsed.
